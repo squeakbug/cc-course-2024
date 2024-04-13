@@ -1,0 +1,21 @@
+expr -> arithExpr relOp arithExpr
+expr -> arithExpr
+arithExpr -> arithExpr plusOp term
+arithExpr -> term
+term -> term multOp factor
+term -> factor
+factor -> id
+factor -> const
+factor -> '(' arithExpr ')'
+relOp -> '<'
+relOp -> '<='
+relOp -> '='
+relOp -> '<>'
+relOp -> '>'
+relOp -> '>='
+plusOp -> '+'
+plusOp -> '-'
+multOp -> '*'
+multOp -> '/'
+id -> 'a'
+const -> 'A'
