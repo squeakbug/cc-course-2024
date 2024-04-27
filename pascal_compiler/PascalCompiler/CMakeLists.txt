@@ -22,7 +22,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/grammar/generated .)
 link_libraries(antlr4-runtime LLVM)
 
 add_custom_target(
-    clangformat
+    format
     ALL
     COMMAND /usr/bin/clang-format-15
     -style=LLVM

@@ -3,16 +3,14 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 
-#include "antlr4-runtime.h"
+#include "PascalBaseVisitor.h"
 #include "PascalLexer.h"
 #include "PascalParser.h"
-#include "PascalBaseVisitor.h"
+#include "antlr4-runtime.h"
 
 using namespace antlr4;
 
-
-int main(int argc, const char* argv[])
-{
+int main(int argc, const char *argv[]) {
   std::string filename = argv[1];
   std::ifstream stream;
   stream.open(filename);
