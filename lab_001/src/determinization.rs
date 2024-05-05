@@ -89,8 +89,6 @@ pub fn remove_eps(mut fa: FiniteAutomata) -> FiniteAutomata {
         new_table.insert(*parent, new_hashmap);
     }
 
-    
-
     fa.transition_table = new_table;
     fa.states = no_eps_states;
     fa

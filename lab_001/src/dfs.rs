@@ -445,7 +445,6 @@ mod dfs_tests {
         fa2.remove_final_state(0);
         fa2.set_final_state(state22);
 
-        
         let fa = union_fa(fa1, fa2);
 
         assert!(fa.states == HashSet::from_iter(vec![0, 1, 2, 3, 4, 5, 6, 7]));
