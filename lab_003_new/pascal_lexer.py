@@ -59,7 +59,7 @@ def read_grammar(filename):
 
 
 if __name__ == "__main__":
-    f = open("examples/example_001.pas")
+    f = open("examples/example_003.pas")
     example = f.read().strip()
     f.close()
     rules, patterns = read_grammar("grammars/pascal.g")

@@ -29,99 +29,105 @@ class PascalParser:
         self.patterns = patterns
 
     def parse_var(self, input, pos) -> Result[ASTNode, str]:
-        token = input[pos]
-        pos += 1
+        token = input[pos[0]]
         match token:
             case Token(name="ID"):
-                print(token)
+                pos[0] += 1
                 return Ok(ASTNode(token))
             case _:
                 return Err("Unexpected var pattern")
 
-    def intTryParse(value):
+    def intTryParse(self, value):
         try:
             return int(value), True
         except ValueError:
             return value, False
 
     def parse_integer(self, input, pos) -> Result[ASTNode, str]:
-        token = input[pos]
-        pos += 1
-        parsed_int, success = self.intTryParse(token)
+        token = input[pos[0]]
+        parsed_int, success = self.intTryParse(token.value)
         if success:
-            return Ok(ASTNode(parsed_int))
+            pos[0] += 1
+            return Ok(ASTNode(Token(name="INTEGER", value=parsed_int)))
         else:
             return Err("Unexpected integer pattern")
 
     def parse_rel_op(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("relOp")
-
-        token = input[pos]
-        pos += 1
-        if token in self.rel_ops:
-            rel_op_node = ASTNode(token)
-            root.children.append(rel_op_node)
-
-        return root
+        token = input[pos[0]]
+        match token:
+            case Token(name="RELOP"):
+                pos[0] += 1
+                root.children.append(ASTNode(token))
+                return Ok(root)
+            case _:
+                return Err("Unexpected var pattern")
 
     def parse_plus_op(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("plusOp")
-
-        token = input[pos]
-        pos += 1
-        if token in self.plus_ops:
-            plus_op_node = ASTNode(token)
-            root.children.append(plus_op_node)
-
-        return root
+        token = input[pos[0]]
+        match token:
+            case Token(name="PLUSOP"):
+                pos[0] += 1
+                root.children.append(ASTNode(token))
+                return Ok(root)
+            case _:
+                return Err("Unexpected var pattern")
 
     def parse_mult_op(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("multOp")
-
-        token = input[pos]
-        pos += 1
-        if token in self.mult_ops:
-            mult_op_node = ASTNode(token)
-            root.children.append(mult_op_node)
-
-        return root
+        token = input[pos[0]]
+        match token:
+            case Token(name="MULTOP"):
+                pos[0] += 1
+                root.children.append(ASTNode(token))
+                return Ok(root)
+            case _:
+                return Err("Unexpected var pattern")
 
     def parse_const(self, input, pos) -> Result[ASTNode, str]:
         return self.parse_var(input, pos)
 
     def parse_left_paren(self, input, pos) -> Result[ASTNode, str]:
-        token = input[pos]
-        pos += 1
-        if token == "(":
-            return Ok(ASTNode(token))
-        else:
-            return Err("Unexpected left paren")
+        token = input[pos[0]]
+        match token:
+            case Token(name="LEFT_PAREN"):
+                pos[0] += 1
+                return Ok(ASTNode(token))
+            case _:
+                return Err("Unexpected left paren")
 
     def parse_right_paren(self, input, pos) -> Result[ASTNode, str]:
-        token = input
-        pos += 1
-        if token == ")":
-            return Ok(ASTNode(token))
-        else:
-            return Err("Unexpected right paren")
+        token = input[pos[0]]
+        match token:
+            case Token(name="RIGHT_PAREN"):
+                pos[0] += 1
+                return Ok(ASTNode(token))
+            case _:
+                return Err("Unexpected right paren")
 
     def parse_factor(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("factor")
-        node = self.anyof([
+        mb_node = self.anyof([
             self.parse_const,
             self.parse_var,
+            self.parse_integer,
             self.a([
                 self.parse_left_paren,
                 self.parse_arith_expr,
                 self.parse_right_paren,
             ]),
         ])(input, pos)
-        root.children.append(node)
-        return root
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+        return Ok(root)
 
     def parse_term(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("term")
-        node = self.anyof([
+        mb_node = self.anyof([
             self.parse_factor,
             self.a([
                 self.parse_term,
@@ -129,143 +135,203 @@ class PascalParser:
                 self.parse_factor,
             ]),
         ])(input, pos)
-        root.children.append(node)
-        return root
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+        return Ok(root)
 
     def parse_arith_expr(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("arith_expr")
-        node = self.anyof([
-            self.parse_term,
-            self.a([
-                self.parse_arith_expr,
-                self.parse_plus_op,
-                self.parse_term,
-            ]),
-        ])(input, pos)
-        root.children.append(node)
-        return root
+        mb_node = self.parse_term(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+
+        mb_node = self.parse_plus_op(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return Ok(root)
+
+        mb_node = self.parse_arith_expr(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+        return Ok(root)
 
     def parse_expr(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("expr")
-        node = self.anyof([
-            self.parse_arith_expr,
-            self.a([
-                self.parse_arith_expr,
-                self.parse_rel_op,
-                self.parse_arith_expr,
-            ]),
-        ])(input, pos)
-        root.children.append(node)
-        return root
+        mb_node = self.parse_arith_expr(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+
+        mb_node = self.parse_rel_op(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return Ok(root)
+
+        mb_node = self.parse_arith_expr(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
+
+        return Ok(root)
 
     def parse_operator(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("operator")
-
         mb_var_node = self.parse_var(input, pos)
         match mb_var_node:
             case Ok(var_node):
                 root.children.append(var_node)
-            case Err(err):
-                return Err(err)
-        token = input[pos]
-        pos += 1
-        if token == "=":
-            eq_node = ASTNode("=")
-            root.children.append(eq_node)
+            case err:
+                return err
+
+        token = input[pos[0]]
+        match token:
+            case Token(name='RELOP', value='='):
+                root.children.append(ASTNode(token))
+                pos[0] += 1
+            case _:
+                return Err(f"Unexpected RELOP token in pos: {pos}")
+
         mb_expr_node = self.parse_expr(input, pos)
         match mb_expr_node:
             case Ok(expr_node):
                 root.children.append(expr_node)
-            case Err(err):
-                return Err(err)
-        return root
+            case err:
+                return err
 
-    def parse_sep(self, input) -> Result[ASTNode, str]:
-        root = ASTNode("sep")
-        token = next(input)
-        if token in self.plus_ops:
-            plus_op_node = ASTNode(token)
-            root.children.append(plus_op_node)
-        return root
+        return Ok(root)
 
-    def parse_operator_list(self, input, pos):
+    def parse_sep(self, input, pos) -> Result[ASTNode, str]:
+        token = input[pos[0]]
+        match token:
+            case Token(name="SEP"):
+                pos[0] += 1
+                return Ok(ASTNode(token))
+            case _:
+                return Err("Unexpected separator")
+
+    def parse_operator_list(self, input, pos) -> Result[ASTNode, str]:       
         root = ASTNode("operator_list")
-        node = self.anyof([
+        mb_node = self.a([
             self.parse_operator,
-            self.a([
-                self.parse_operator_list,
-                self.parse_sep,
-                self.parse_operator
-            ]),
+            self.parse_sep
         ])(input, pos)
-        root.children.append(node)
-        return root
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return err
 
-    def parse_block(self, input, pos) -> ASTNode:
+        mb_node = self.parse_operator_list(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+
+        return Ok(root)
+
+    def parse_block(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("block")
-
-        term = input[pos]
-        pos += 1
-        match term:
+        token = input[pos[0]]
+        match token:
             case Token(name='BEGIN'):
-                root.children.append(ASTNode("begin"))
+                pos[0] += 1
+                root.children.append(ASTNode(token))
             case _:
-                pass
-        opearator_list_node = self.parse_operator_list(input, pos)
-        root.children.append(opearator_list_node)
-        pos += 1
-        match term:
-            case Token(name='end'):
-                root.children.append(ASTNode("end"))
+                return Err(f"Unexpected BEGIN in pos: {pos[0]}")
+
+        match self.parse_operator_list(input, pos):
+            case Ok(operator_list_node):
+                root.children.append(operator_list_node)
+            case err:
+                return err
+
+        token = input[pos[0]]
+        match token:
+            case Token(name='END'):
+                pos[0] += 1
+                root.children.append(ASTNode(token))
             case _:
-                pass
+                return Err(f"Unexpected END in pos: {pos[0]}")
 
-        return root
+        return Ok(root)
 
-    def parse_program(self, input, pos) -> ASTNode:
+    def parse_program(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("program")
-        block_node = self.parse_block(input, pos)
-        root.children.append(block_node)
-        return root
+        match self.parse_block(input, pos):
+            case Ok(block_node):
+                root.children.append(block_node)
+            case err:
+                return err
+        return Ok(root)
 
-    def parse(self, text):
+    def parse(self, text) -> Result[ASTNode, str]:
         input = list(PascalLexer(self.patterns).lex(text))
-        pos = 0
-
+        pos = [0]
         root = None
         try:
             root = ASTNode("root")
-            program_node = self.parse_program(input, pos)
-            root.children.append(program_node)
+            match self.parse_program(input, pos):
+                case Ok(program_node):
+                    root.children.append(program_node)
+                case err:
+                    return err
         except StopIteration:
-            pass
-        return root
-    
+            return Err("Unexpected end of file")
+        return Ok(root)
+
     def anyof(self, rules):
-        def inner(input, pos):
+        def inner(input, pos) -> Result[ASTNode, str]:
             for rule in rules:
-                node = rule(input, pos)
-                if node != None:
-                    return node
-            return None
+                mb_node = rule(input, pos)
+                match mb_node:
+                    case Ok(node):
+                        return Ok(node)
+                    case _:
+                        pass
+            return Ok(None)
         return inner
-    
+
     def a(self, rules):
-        def inner(input, pos):
+        def inner(input, pos) -> Result[ASTNode, str]:
             root = ASTNode("<proxy>")
             for rule in rules:
-                node = rule(input, pos)
-                if node != None:
-                    root.children.append(node)
-            return root
+                mb_node = rule(input, pos)
+                match mb_node:
+                    case Ok(node):
+                        root.children.append(node)
+                    case err:
+                        return err
+            return Ok(root)
         return inner
 
 if __name__ == '__main__':
     example = ""
-    with open("examples/example_001.pas", "r") as f:
+    with open("examples/example_004.pas", "r") as f:
         example = f.read()
     rules, patterns = read_grammar("grammars/pascal.g")
     parser = PascalParser(patterns)
-    ast = parser.parse(example)
+    ast = None
+    match parser.parse(example):
+        case Err(err):
+            print(err)
+            exit(-1)
+        case Ok(ast):
+            ast = ast
     ditree = ast.print()
     print(ditree)

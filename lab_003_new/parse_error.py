@@ -1,7 +1,7 @@
 class ParseError(Exception):
-    def __init__(self, pos, lexem) -> None:
+    def __init__(self, pos, token) -> None:
         self.pos = pos
-        self.term = lexem
+        self.token = token
 
     def __str__(self) -> str:
-        return super().__str__() + f" at position {self.pos}:\n{self.term}"
+        return super().__str__() + f" at position {self.pos}:\n{self.token}"
