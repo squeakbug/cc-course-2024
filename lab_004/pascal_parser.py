@@ -113,32 +113,43 @@ class PascalParser:
                         root.value = node.value
                     case 3:
                         root.value = " ".join([node.value for node in node.children])
+                root.children.append(node)
             case err:
                 return err
         return Ok(root)
 
     def parse_term(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("term")
-        (choise, mb_node) = self.anyof([
-            self.parse_factor,
-            self.a([
-                self.parse_term,
-                self.parse_mult_op,
-                self.parse_factor,
-            ], ASTNode("<proxy>")),
-        ])(input, pos)
+        mb_node = self.parse_factor(input, pos)
         match mb_node:
             case Ok(node):
-                match choise:
-                    case 0:
-                        root.value = node.value
-                    case 1:
-                        multop_val = node.children[1].value
-                        term_val = node.children[2].value
-                        factor_val = node.children[0].value
-                        root.value = f"{multop_val} {term_val} {factor_val}"
+                factor_val = node.value
+                root.value = f"{factor_val}"
+
+                root.children.append(node)
             case err:
                 return err
+            
+        mb_node = self.parse_mult_op(input, pos)
+        match mb_node:
+            case Ok(node):
+                multop_val = node.children[0].value
+                root.value = f"{multop_val} {root.value}"
+
+                root.children.append(node)
+            case err:
+                return Ok(root)
+        
+        mb_node = self.parse_term(input, pos)
+        match mb_node:
+            case Ok(node):
+                term_val = node.value
+                root.value = f"{multop_val} {term_val} {factor_val}"
+
+                root.children.append(node)
+            case err:
+                return err
+
         return Ok(root)
 
     def parse_arith_expr(self, input, pos) -> Result[ASTNode, str]:
@@ -176,6 +187,8 @@ class PascalParser:
         mb_node = self.parse_arith_expr(input, pos)
         match mb_node:
             case Ok(node):
+                arith_left = node.value
+                root.value = arith_left
                 root.children.append(node)
             case err:
                 return err
@@ -183,6 +196,8 @@ class PascalParser:
         mb_node = self.parse_rel_op(input, pos)
         match mb_node:
             case Ok(node):
+                relop = node.value
+                root.value = f"{relop} {arith_left}"
                 root.children.append(node)
             case err:
                 root.value = root.children[0].value
@@ -191,14 +206,12 @@ class PascalParser:
         mb_node = self.parse_arith_expr(input, pos)
         match mb_node:
             case Ok(node):
+                arith_right = node.value
+                root.value = f"{relop} {arith_right} {arith_left}"
                 root.children.append(node)
             case err:
                 return err
 
-        arith1 = root.children[0].value
-        arith2 = root.children[1].value
-        relop = root.children[1].value
-        root.value = f"{relop} {arith1} {arith2}"
         return Ok(root)
 
     def parse(self, text) -> Result[ASTNode, str]:
@@ -238,6 +251,7 @@ class PascalParser:
                         root.children.append(node)
                     case err:
                         return err
+            root.value = " ".join([str(node.value) for node in root.children])
             return Ok(root)
         return inner
 

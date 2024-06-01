@@ -10,7 +10,7 @@ class ASTNode:
         if not tree:
             tree = Digraph()
             tree.node_attr["shape"] = "plain"
-        tree.node(id, str(self.data))
+        tree.node(id, "%s" % str(self.value))
         if parent:
             tree.edge(parent, id)
         for i, child in enumerate(self.children):

@@ -23,7 +23,9 @@ def main():
             exit(-1)
         case Ok(ast):
             ast = ast
-    print(ast.value)
+    print("#", ast.value)
+    ditree = ast.print()
+    print(ditree)
 
 if __name__ == "__main__":
     main()
