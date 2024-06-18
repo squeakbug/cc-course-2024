@@ -7,12 +7,15 @@ pub enum SymbolType {
     Eps,
 }
 
+pub type TrTableType = HashMap<StateID, HashMap<SymbolType, HashSet<StateID>>>;
+
+#[derive(Debug)]
 pub struct FiniteAutomata {
-    pub transition_table: HashMap<StateID, HashMap<SymbolType, HashSet<StateID>>>,
+    pub transition_table: TrTableType,
     pub states: HashSet<StateID>,
     pub start_state: StateID,
     pub final_states: HashSet<StateID>,
-    pub alphabet: Vec<u8>,
+    pub alphabet: HashSet<u8>,
 }
 
 impl FiniteAutomata {
@@ -25,7 +28,7 @@ impl FiniteAutomata {
             final_states: HashSet::from_iter(vec![start_stateid]),
             start_state: start_stateid,
             states: HashSet::from_iter(vec![start_stateid]),
-            alphabet: vec![],
+            alphabet: HashSet::new(),
         }
     }
 
@@ -87,8 +90,9 @@ impl FiniteAutomata {
 
     pub fn add_final_state(&mut self, state: StateID) {
         assert!(self.states.contains(&state));
-        assert!(!self.final_states.contains(&state));
-        self.final_states.insert(state);
+        if !self.final_states.contains(&state) {
+            self.final_states.insert(state);
+        }
     }
 
     pub fn remove_final_state(&mut self, state: StateID) {
@@ -107,6 +111,50 @@ impl FiniteAutomata {
     fn is_valid(&self, state_id: StateID) -> bool {
         state_id < self.states.len()
     }
+}
+
+impl FiniteAutomata {
+    pub fn is_match(&self, input: &str) -> bool {
+        let mut current_state = self.start_state;
+        for c in input.bytes() {
+            let next_state = self.transition_table
+                .get(&current_state)
+                .and_then(|table| table.get(&SymbolType::Alpha(c)))
+                .cloned()
+                .unwrap_or_default();
+            // println!("char: {}; next_state: {:?}", c, next_state);
+            if next_state.is_empty() {
+                return false;
+            } else {
+                current_state = *next_state.iter().next().unwrap();
+            }
+        }
+        self.final_states.contains(&current_state)
+    }
+}
+
+pub fn exchange_states(tr_table: TrTableType, old_state: StateID, new_state: StateID) -> TrTableType {
+    let mut new_table = tr_table.clone();
+
+    if let Some(old_state_transitions) = tr_table.get(&old_state).clone() {
+       new_table.remove(&old_state);
+       new_table.insert(new_state, HashMap::new());
+       let new_state_transitions = new_table.get_mut(&new_state).expect("No new state transitions");
+       for (symbol, to_states) in old_state_transitions {
+           new_state_transitions.insert(*symbol, to_states.clone());
+       }
+   }
+
+   for (_, transitions) in new_table.iter_mut() {
+       for (_, to_states) in transitions.iter_mut() {
+           if to_states.contains(&old_state) {
+               to_states.retain(|to| *to != old_state);
+               to_states.insert(new_state);
+           }
+       }
+   }
+
+   new_table
 }
 
 pub fn concat_fa(mut fa1: FiniteAutomata, mut fa2: FiniteAutomata) -> FiniteAutomata {
@@ -129,6 +177,8 @@ pub fn concat_fa(mut fa1: FiniteAutomata, mut fa2: FiniteAutomata) -> FiniteAuto
     for state in fa1_old_final_states.into_iter() {
         fa1.add_transition(state, SymbolType::Eps, fa2_start_state);
     }
+
+    fa1.alphabet = fa1.alphabet.union(&fa2.alphabet).cloned().collect();
 
     fa1
 }
@@ -159,6 +209,8 @@ pub fn union_fa(mut fa1: FiniteAutomata, mut fa2: FiniteAutomata) -> FiniteAutom
         fa1.add_transition(final_state, SymbolType::Eps, new_final_state);
     }
     fa1.final_states = HashSet::from_iter(vec![new_final_state]);
+
+    fa1.alphabet = fa1.alphabet.union(&fa2.alphabet).cloned().collect();
 
     fa1
 }
@@ -278,31 +330,40 @@ impl FiniteAutomata {
 impl DotPrintable for FiniteAutomata {
     fn to_dot_notation(&self) -> String {
         let mut output_str = String::from("digraph FiniteAutomata {\n");
-        let start_state = self.start_state;
         let mut state_queue = VecDeque::<StateID>::new();
-        let mut processed_vec = Vec::<StateID>::new();
-        state_queue.push_back(start_state);
+        let mut processed_vec = HashSet::<StateID>::new();
+        let mut processed_tr = HashSet::<(StateID, SymbolType, StateID)>::new();
 
         for &state in self.states.iter() {
             let state_str = self.stringify_state(state);
             output_str.push_str(&state_str);
         }
-        while let Some(from) = state_queue.pop_front() {
-            processed_vec.push(from);
-            if let Some(transitions) = self.transition_table.get(&from) {
-                for tr in transitions {
-                    let &sym = tr.0;
-                    let to_states = tr.1;
 
-                    for &to in to_states {
-                        let state_str = self.stringify_transition(from, sym, to);
-                        output_str.push_str(&state_str);
+        for &state in self.states.iter() {
+            state_queue.push_back(state);
+            while let Some(from) = state_queue.pop_front() {
+                if processed_vec.contains(&from) {
+                    continue;
+                }
+                if let Some(transitions) = self.transition_table.get(&from) {
+                    for tr in transitions {
+                        let &sym = tr.0;
+                        let to_states = tr.1;
 
-                        if !processed_vec.contains(&to) {
-                            state_queue.push_back(to);
+                        for &to in to_states {
+                            if !processed_tr.contains(&(from, sym, to)) {
+                                processed_tr.insert((from, sym, to));
+                                let state_str = self.stringify_transition(from, sym, to);
+                                output_str.push_str(&state_str);
+
+                                if !processed_vec.contains(&to) {
+                                    state_queue.push_back(to);
+                                }
+                            }
                         }
                     }
                 }
+                processed_vec.insert(from);
             }
         }
         output_str.push('}');

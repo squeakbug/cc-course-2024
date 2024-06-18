@@ -127,19 +127,23 @@ class PascalParser:
 
     def parse_term(self, input, pos) -> Result[ASTNode, str]:
         root = ASTNode("term")
-        mb_node = self.anyof([
-            self.parse_factor,
-            self.a([
-                self.parse_term,
-                self.parse_mult_op,
-                self.parse_factor,
-            ]),
-        ])(input, pos)
+        mb_node = self.parse_factor(input, pos)
         match mb_node:
             case Ok(node):
                 root.children.append(node)
             case err:
                 return err
+
+        mb_node = self.a([
+            self.parse_mult_op,
+            self.parse_factor,
+        ])(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+            case err:
+                return Ok(root)
+
         return Ok(root)
 
     def parse_arith_expr(self, input, pos) -> Result[ASTNode, str]:
@@ -228,6 +232,12 @@ class PascalParser:
 
     def parse_operator_list(self, input, pos) -> Result[ASTNode, str]:       
         root = ASTNode("operator_list")
+        mb_node = self.parse_sep(input, pos)
+        match mb_node:
+            case Ok(node):
+                root.children.append(node)
+                return self.parse_operator_list(input, pos)
+
         mb_node = self.a([
             self.parse_operator,
             self.parse_sep

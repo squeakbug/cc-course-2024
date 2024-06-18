@@ -1,5 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
+use regex::Regex;
+
 use crate::dfs::SymbolType;
 use crate::dfs::{concat_fa, ref_trans_closure, trans_closure, union_fa, FiniteAutomata};
 
@@ -11,9 +13,18 @@ pub fn from_sym(ch: char) -> FiniteAutomata {
     fa
 }
 
+pub fn from_regexp(input: &Regex) -> FiniteAutomata {
+    let regex_string = input.to_string();
+    let mut input_stream = regex_string.chars().peekable();
+    return from_regexp_iter(&mut input_stream);
+}
+
 pub fn from_regexp_iter(input: &mut Peekable<Chars<'_>>) -> FiniteAutomata {
     let mut fa = FiniteAutomata::minimal();
     while let Some(ch) = input.next() {
+        if char::is_alphabetic(ch) {
+            fa.alphabet.insert(ch as u8);
+        }
         match ch {
             '(' => {
                 let mut tmp = from_regexp_iter(input);

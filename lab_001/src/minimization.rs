@@ -1,12 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::dfs::{FiniteAutomata, StateID, SymbolType};
+use crate::dfs::{FiniteAutomata, StateID, SymbolType, TrTableType, exchange_states};
 
-type TrTable = HashMap<StateID, HashMap<SymbolType, HashSet<StateID>>>;
-
-fn get_reverse_transitions(fa: &FiniteAutomata) -> TrTable {
+pub fn get_reverse_transitions(fa: &FiniteAutomata) -> TrTableType {
     let old_tr_table = &fa.transition_table;
-    let mut new_tr_table = TrTable::new();
+    let mut new_tr_table = TrTableType::new();
 
     for (from_state, from_state_map) in old_tr_table.iter() {
         for (sym, to_states) in from_state_map.iter() {
@@ -34,7 +32,7 @@ fn get_reverse_transitions(fa: &FiniteAutomata) -> TrTable {
     return new_tr_table;
 }
 
-fn build_table(fa: &FiniteAutomata, rev_tr_table: &TrTable) -> Vec<Vec<bool>> {
+fn build_table(fa: &FiniteAutomata, rev_tr_table: &TrTableType) -> Vec<Vec<bool>> {
     let mut result: Vec<Vec<bool>> = vec![];
     let states_cnt = fa.states.len();
     for _ in 0..states_cnt {
@@ -48,7 +46,9 @@ fn build_table(fa: &FiniteAutomata, rev_tr_table: &TrTable) -> Vec<Vec<bool>> {
     let mut queue = VecDeque::<(&StateID, &StateID)>::new();
     for state_i in fa.states.iter() {
         for state_j in fa.states.iter() {
-            if result[*state_i][*state_j] == false && (fa.final_states.contains(&state_i) != fa.final_states.contains(&state_j)) {
+            if result[*state_i][*state_j] == false
+                && (fa.final_states.contains(&state_i) != fa.final_states.contains(&state_j))
+            {
                 result[*state_i][*state_j] = true;
                 result[*state_j][*state_i] = true;
                 queue.push_back((&state_i, &state_j));
@@ -102,16 +102,25 @@ fn get_components(table: &Vec<Vec<bool>>) -> Vec<i32> {
     return components;
 }
 
+fn build_new_tr_table(mut tr_table: TrTableType, components: &Vec<i32>, states: &HashSet<usize>) -> TrTableType {
+    for state in states.iter() {
+        let eq_states: Vec<usize> = components.iter().enumerate().filter(|(_, new_state)| {
+            **new_state == *state as i32
+        }).map(|(old_state, _)| old_state).collect();
+
+        for eq_state in eq_states {
+            tr_table = exchange_states(tr_table, eq_state, *state + 100);
+        }
+    }
+    tr_table
+}
+
 pub fn minimize(fa: FiniteAutomata) -> FiniteAutomata {
     let rev_tr_table = get_reverse_transitions(&fa);
     let table = build_table(&fa, &rev_tr_table);
     let components = get_components(&table);
     let mut new_fa = FiniteAutomata::minimal();
 
-    let mut new_tr_table = HashMap::new();
-    
-
-    new_fa.transition_table = new_tr_table;
     let mut new_states = HashSet::new();
     for &state in components.iter() {
         new_states.insert(state as usize);
@@ -127,6 +136,11 @@ pub fn minimize(fa: FiniteAutomata) -> FiniteAutomata {
         }
     }
     new_fa.alphabet = fa.alphabet.clone();
+    new_fa.transition_table = build_new_tr_table(fa.transition_table, &components, &new_fa.states);
+
+    new_fa.final_states = new_fa.final_states.into_iter().map(|x| x + 100).collect();
+    new_fa.start_state = new_fa.start_state + 100;
+    new_fa.states = new_fa.states.into_iter().map(|x| x + 100).collect();
 
     return new_fa;
 }
@@ -135,12 +149,46 @@ pub fn minimize(fa: FiniteAutomata) -> FiniteAutomata {
 mod minimization_tests {
     use std::collections::HashSet;
 
+    use crate::dfs::DotPrintable;
     use crate::dfs::FiniteAutomata;
     use crate::dfs::SymbolType;
     use crate::minimization::build_table;
     use crate::minimization::get_reverse_transitions;
+    use crate::minimization::minimize;
 
     use super::get_components;
+
+    fn build_test_fa() -> FiniteAutomata {
+        let mut fa = FiniteAutomata::minimal();
+        let s0 = fa.get_start_state();
+        let s1 = fa.add_state();
+        let s2 = fa.add_state();
+        let s3 = fa.add_state();
+        let s4 = fa.add_state();
+        let s5 = fa.add_state();
+        let s6 = fa.add_state();
+        let s7 = fa.add_state();
+        fa.add_transition(s0, SymbolType::Alpha(b'1'), s1);
+        fa.add_transition(s0, SymbolType::Alpha(b'0'), s7);
+        fa.add_transition(s1, SymbolType::Alpha(b'1'), s0);
+        fa.add_transition(s1, SymbolType::Alpha(b'0'), s7);
+        fa.add_transition(s7, SymbolType::Alpha(b'0'), s2);
+        fa.add_transition(s7, SymbolType::Alpha(b'1'), s2);
+        fa.add_transition(s2, SymbolType::Alpha(b'0'), s4);
+        fa.add_transition(s2, SymbolType::Alpha(b'1'), s5);
+        fa.add_transition(s3, SymbolType::Alpha(b'0'), s4);
+        fa.add_transition(s3, SymbolType::Alpha(b'1'), s5);
+        fa.add_transition(s4, SymbolType::Alpha(b'0'), s5);
+        fa.add_transition(s4, SymbolType::Alpha(b'1'), s6);
+        fa.add_transition(s5, SymbolType::Alpha(b'0'), s5);
+        fa.add_transition(s5, SymbolType::Alpha(b'1'), s5);
+        fa.add_transition(s6, SymbolType::Alpha(b'0'), s6);
+        fa.add_transition(s6, SymbolType::Alpha(b'1'), s5);
+        fa.set_final_state(s5);
+        fa.add_final_state(s6);
+        fa.alphabet = HashSet::from_iter(vec![b'0', b'1']);
+        fa
+    }
 
     #[test]
     fn check_add_state() {
@@ -192,30 +240,7 @@ mod minimization_tests {
 
     #[test]
     fn check_build_table() {
-        let mut fa = FiniteAutomata::minimal();
-        let s0 = fa.get_start_state();
-        let s1 = fa.add_state(); let s4 = fa.add_state(); let s7 = fa.add_state();
-        let s2 = fa.add_state(); let s5 = fa.add_state();
-        let s3 = fa.add_state(); let s6 = fa.add_state();
-        fa.add_transition(s0, SymbolType::Alpha(b'1'), s1);
-        fa.add_transition(s0, SymbolType::Alpha(b'0'), s7);
-        fa.add_transition(s1, SymbolType::Alpha(b'1'), s0);
-        fa.add_transition(s1, SymbolType::Alpha(b'0'), s7);
-        fa.add_transition(s7, SymbolType::Alpha(b'0'), s2);
-        fa.add_transition(s7, SymbolType::Alpha(b'1'), s2);
-        fa.add_transition(s2, SymbolType::Alpha(b'0'), s4);
-        fa.add_transition(s2, SymbolType::Alpha(b'1'), s5);
-        fa.add_transition(s3, SymbolType::Alpha(b'0'), s4);
-        fa.add_transition(s3, SymbolType::Alpha(b'1'), s5);
-        fa.add_transition(s4, SymbolType::Alpha(b'0'), s5);
-        fa.add_transition(s4, SymbolType::Alpha(b'1'), s6);
-        fa.add_transition(s5, SymbolType::Alpha(b'0'), s5);
-        fa.add_transition(s5, SymbolType::Alpha(b'1'), s5);
-        fa.add_transition(s6, SymbolType::Alpha(b'0'), s6);
-        fa.add_transition(s6, SymbolType::Alpha(b'1'), s5);
-        fa.set_final_state(s5);
-        fa.add_final_state(s6);
-        fa.alphabet = vec![b'0', b'1'];
+        let fa = build_test_fa();
 
         let rev_transition_table = get_reverse_transitions(&fa);
         let table = build_table(&fa, &rev_transition_table);
@@ -232,7 +257,7 @@ mod minimization_tests {
             vec![true, true, false, false],
             vec![true, true, false, false],
         ];
-        
+
         let components = get_components(&table);
 
         assert_eq!(components, vec![0, 0, 1, 1]);
@@ -240,6 +265,10 @@ mod minimization_tests {
 
     #[test]
     fn check_minimization() {
+        let fa = build_test_fa();
 
+        let minimized_fa = minimize(fa);
+
+        println!("{}", minimized_fa.to_dot_notation());
     }
 }
